@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block content %}
+
+<div class="container mt-4">
+
+  <div class="d-sm-flex align-items-center justify-content-between border-bottom mb-3">
+    <h3 class="fw-bold">📦 Historique des colis récupérés</h3>
+    <span class="badge bg-success fs-6">{{ count }} colis livré{{ count|pluralize }}</span>
+  </div>
+
+  <!-- Recherche -->
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-sm-8 col-md-6">
+      <input type="text" name="q" value="{{ search }}" class="form-control"
+             placeholder="Rechercher par receveur, client ou description…">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">Rechercher</button>
+      {% if search %}
+        <a href="{% url 'delivery-history' %}" class="btn btn-outline-secondary">Réinitialiser</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Date de récupération</th>
+              <th>Description</th>
+              <th>Client (expéditeur)</th>
+              <th>Récupéré par (receveur)</th>
+              <th>Manifeste</th>
+              <th>Enregistré par</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in deliveries %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td class="text-muted small">{{ d.delivered_at|date:"d/m/Y H:i" }}</td>
+              <td class="text-muted small">{{ d.package.description }}</td>
+              <td>{{ d.package.owner_name }}</td>
+              <td class="fw-semibold">
+                <a href="#" class="edit-receiver text-decoration-none"
+                   data-id="{{ d.id }}"
+                   data-name="{{ d.received_by|default:d.package.receiver_name }}"
+                   title="Cliquer pour modifier le receveur">
+                  <span class="receiver-name">{{ d.received_by|default:d.package.receiver_name }}</span>
+                  <small class="text-muted">✎</small>
+                </a>
+              </td>
+              <td>
+                {% if d.package.manifest %}
+                  <a href="{% url 'manifest-details' d.package.manifest.id %}" class="text-decoration-none">
+                    {{ d.package.manifest.code }}
+                  </a>
+                {% else %}—{% endif %}
+              </td>
+              <td>{{ d.recorded_by|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">Aucun colis récupéré pour le moment.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal : modifier le receveur -->
+<div class="modal fade" id="receiverModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Modifier le receveur</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <label for="receiverInput" class="form-label">Nom de la personne qui a récupéré le colis</label>
+        <input type="text" id="receiverInput" class="form-control" placeholder="Nom du receveur">
+        <div id="receiverError" class="text-danger small mt-2" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="saveReceiver">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const modalEl   = document.getElementById('receiverModal');
+  const modal     = new bootstrap.Modal(modalEl);
+  const input     = document.getElementById('receiverInput');
+  const errorBox  = document.getElementById('receiverError');
+  const saveBtn   = document.getElementById('saveReceiver');
+
+  let currentLink = null;   // le lien <a> en cours d'édition
+
+  // Ouvrir le modal au clic sur un nom de receveur
+  document.querySelectorAll('.edit-receiver').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+      currentLink = this;
+      input.value = this.dataset.name || '';
+      errorBox.style.display = 'none';
+      modal.show();
+      setTimeout(() => input.focus(), 300);
+    });
+  });
+
+  // Enregistrer
+  saveBtn.addEventListener('click', function () {
+    if (!currentLink) return;
+    const id      = currentLink.dataset.id;
+    const newName = input.value.trim();
+
+    if (!newName) {
+      errorBox.textContent = 'Le nom du receveur est requis.';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    saveBtn.disabled = true;
+
+    fetch(`/delivery-history/${id}/edit-receiver/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ received_by: newName })
+    })
+    .then(r => r.json())
+    .then(data => {
+      saveBtn.disabled = false;
+      if (!data.success) {
+        errorBox.textContent = data.message || 'Erreur.';
+        errorBox.style.display = 'block';
+        return;
+      }
+      // Mettre à jour la cellule en place
+      currentLink.dataset.name = data.received_by;
+      currentLink.querySelector('.receiver-name').textContent = data.received_by;
+      modal.hide();
+    })
+    .catch(() => {
+      saveBtn.disabled = false;
+      errorBox.textContent = 'Erreur de connexion.';
+      errorBox.style.display = 'block';
+    });
+  });
+
+  // Soumettre avec la touche Entrée
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+  });
+
+  function getCookie(name) {
+    let value = null;
+    if (document.cookie && document.cookie !== '') {
+      document.cookie.split(';').forEach(function (c) {
+        c = c.trim();
+        if (c.substring(0, name.length + 1) === (name + '=')) {
+          value = decodeURIComponent(c.substring(name.length + 1));
+        }
+      });
+    }
+    return value;
+  }
+
+});
+</script>
+
+{% endblock %}

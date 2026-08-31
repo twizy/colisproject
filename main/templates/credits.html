@@ -1,0 +1,403 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+  <!-- HEADER -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0 fw-bold text-danger">Crédits clients</h4>
+      <small class="text-muted">Colis expédiés sans paiement complet</small>
+    </div>
+    <form method="get" class="d-flex gap-2">
+      <input type="text" name="q" value="{{ search }}" class="form-control"
+             placeholder="Rechercher un client…" style="width:240px;">
+      <button type="submit" class="btn btn-outline-secondary">Filtrer</button>
+      {% if search %}<a href="{% url 'credits' %}" class="btn btn-outline-danger">✕</a>{% endif %}
+    </form>
+  </div>
+
+  <!-- SUMMARY CARDS -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="kpi text-center">
+        <div class="fw-bold fs-4 text-danger" id="kpi_customers">{{ total_customers }}</div>
+        <div class="small-muted">Clients en crédit</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="kpi text-center">
+        <div class="fw-bold fs-4 text-warning" id="kpi_items">{{ total_items }}</div>
+        <div class="small-muted">Colis non soldés</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="kpi text-center">
+        <div class="fw-bold fs-4 text-danger" id="kpi_total">$ {{ grand_total|floatformat:2|intcomma }}</div>
+        <div class="small-muted">Balance totale due</div>
+      </div>
+    </div>
+  </div>
+
+  {% if not customers_list %}
+    <div class="card shadow-sm">
+      <div class="card-body text-center text-muted py-5">
+        {% if search %}Aucun client en crédit pour « {{ search }} ».
+        {% else %}Aucun crédit enregistré. Tous les colis sont soldés !{% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- CUSTOMER SECTIONS -->
+  {% for name, data in customers_list %}
+  <div class="card shadow-sm mb-4" id="customer_card_{{ forloop.counter }}">
+    <div class="card-header d-flex justify-content-between align-items-center"
+         style="background:linear-gradient(90deg,#fff5f5,#fff);">
+      <div>
+        <span class="fw-bold text-dark fs-6">{{ name }}</span>
+        <span class="badge bg-secondary ms-2" id="badge_count_{{ forloop.counter }}">{{ data.count }} colis</span>
+      </div>
+      <span class="fw-bold text-danger" id="customer_total_{{ forloop.counter }}">
+        Balance : $ {{ data.total_debt|floatformat:2|intcomma }}
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Manifeste</th>
+              <th>Description</th>
+              <th>Receveur</th>
+              <th class="text-end">Poids</th>
+              <th>Mesure</th>
+              <th class="text-end">Prix/unité</th>
+              <th class="text-end">Remise</th>
+              <th class="text-end">Total dû</th>
+              <th class="text-end">Payé</th>
+              <th class="text-end text-danger">Reste dû</th>
+              <th>Date</th>
+              <th class="text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="tbody_{{ forloop.counter }}">
+            {% for row in data.invoices %}
+            {% with inv=row.invoice pkg=row.invoice.package %}
+            <tr id="row_inv_{{ inv.id }}">
+              <td class="text-muted">{{ forloop.counter }}</td>
+              <td>
+                <a href="{% url 'manifest-details' pkg.manifest.id %}"
+                   class="text-decoration-none fw-semibold text-primary">
+                  {{ pkg.manifest.code }}
+                </a>
+              </td>
+              <td>{{ pkg.description }}</td>
+              <td>{{ pkg.receiver_name }}</td>
+              <td class="text-end">{{ pkg.weight|floatformat:2 }}</td>
+              <td>{{ pkg.get_measure_display }}</td>
+              <td class="text-end">$ {{ inv.amount|floatformat:2|intcomma }}</td>
+              <td class="text-end text-success">
+                {% if inv.discount > 0 %}- $ {{ inv.discount|floatformat:2|intcomma }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end">$ {{ inv.total_due|floatformat:2|intcomma }}</td>
+              <td class="text-end text-primary" id="paid_cell_{{ inv.id }}">
+                $ {{ inv.amount_paid|floatformat:2|intcomma }}
+              </td>
+              <td class="text-end fw-bold text-danger" id="balance_cell_{{ inv.id }}">
+                $ {{ row.line_total|floatformat:2|intcomma }}
+              </td>
+              <td class="text-nowrap text-muted small">{{ pkg.taken_at|date:"d/m/Y" }}</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-success pay-btn"
+                        data-invoice-id="{{ inv.id }}"
+                        data-client="{{ pkg.owner_name }}"
+                        data-description="{{ pkg.description }}"
+                        data-total-due="{{ inv.total_due }}"
+                        data-amount-paid="{{ inv.amount_paid }}"
+                        data-balance="{{ row.line_total }}">
+                  Payer
+                </button>
+              </td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+          <tfoot class="table-danger">
+            <tr>
+              <td colspan="10" class="text-end fw-bold">Balance {{ name }}</td>
+              <td class="text-end fw-bold" id="foot_balance_{{ forloop.counter }}">
+                $ {{ data.total_debt|floatformat:2|intcomma }}
+              </td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if customers_list %}
+  <div class="card shadow-sm border-danger mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center">
+      <span class="fw-bold fs-6" id="footer_summary">Total général — {{ total_customers }} client(s), {{ total_items }} colis</span>
+      <span class="fw-bold fs-5 text-danger" id="grand_total_footer">$ {{ grand_total|floatformat:2|intcomma }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="paymentModalLabel">Enregistrer un paiement</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="d-flex justify-content-between text-muted small mb-1">
+            <span>Client</span><strong id="modal_client">—</strong>
+          </div>
+          <div class="d-flex justify-content-between text-muted small mb-1">
+            <span>Colis</span><strong id="modal_description">—</strong>
+          </div>
+          <hr class="my-2">
+          <div class="d-flex justify-content-between mb-1">
+            <span>Total dû</span><span id="modal_total_due" class="fw-semibold">$ 0.00</span>
+          </div>
+          <div class="d-flex justify-content-between mb-1">
+            <span>Déjà payé</span><span id="modal_amount_paid" class="text-primary">$ 0.00</span>
+          </div>
+          <div class="d-flex justify-content-between mb-3">
+            <span class="fw-bold">Reste dû</span>
+            <span id="modal_balance" class="fw-bold text-danger">$ 0.00</span>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Montant à payer (USD)</label>
+          <input type="number" id="payment_amount" class="form-control"
+                 placeholder="0.00" step="0.01" min="0.01">
+          <div id="payment_error" class="text-danger small mt-1 d-none"></div>
+        </div>
+        <div id="payment_preview" class="alert alert-info py-2 d-none">
+          Nouveau reste dû : <strong id="preview_new_balance">$ 0.00</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="confirm_payment_btn">Confirmer le paiement</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  let currentInvoiceId = null;
+  let currentBalance   = 0;
+  const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
+
+  function fmt(n) {
+    return '$ ' + parseFloat(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function parseAmt(text) {
+    return parseFloat(text.replace(/[^0-9.]/g, '')) || 0;
+  }
+
+  // Open modal and populate with row data
+  document.querySelectorAll('.pay-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      currentInvoiceId = this.dataset.invoiceId;
+      currentBalance   = parseFloat(this.dataset.balance);
+
+      document.getElementById('modal_client').textContent      = this.dataset.client;
+      document.getElementById('modal_description').textContent = this.dataset.description;
+      document.getElementById('modal_total_due').textContent   = fmt(this.dataset.totalDue);
+      document.getElementById('modal_amount_paid').textContent = fmt(this.dataset.amountPaid);
+      document.getElementById('modal_balance').textContent     = fmt(this.dataset.balance);
+
+      const input = document.getElementById('payment_amount');
+      input.value = '';
+      input.max   = currentBalance;
+      document.getElementById('payment_error').classList.add('d-none');
+      document.getElementById('payment_preview').classList.add('d-none');
+
+      modal.show();
+    });
+  });
+
+  // Live preview of new balance as user types
+  document.getElementById('payment_amount').addEventListener('input', function () {
+    const amount      = parseFloat(this.value) || 0;
+    const newBalance  = Math.max(currentBalance - amount, 0);
+    const preview     = document.getElementById('payment_preview');
+    const errorEl     = document.getElementById('payment_error');
+
+    if (amount > 0) {
+      document.getElementById('preview_new_balance').textContent = fmt(newBalance);
+      preview.classList.remove('d-none');
+    } else {
+      preview.classList.add('d-none');
+    }
+
+    if (amount > currentBalance) {
+      errorEl.textContent = 'Le montant dépasse la balance. Il sera plafonné automatiquement.';
+      errorEl.classList.remove('d-none');
+    } else {
+      errorEl.classList.add('d-none');
+    }
+  });
+
+  // Confirm payment — AJAX POST
+  document.getElementById('confirm_payment_btn').addEventListener('click', function () {
+    const amount = parseFloat(document.getElementById('payment_amount').value);
+    if (!amount || amount <= 0) {
+      const errorEl = document.getElementById('payment_error');
+      errorEl.textContent = 'Veuillez entrer un montant valide.';
+      errorEl.classList.remove('d-none');
+      return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = 'En cours…';
+
+    fetch(`/record-payment/${currentInvoiceId}/`, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken':  getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ amount: amount }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) {
+        alert('Erreur : ' + (data.message || 'Inconnue'));
+        return;
+      }
+
+      const row      = document.getElementById(`row_inv_${currentInvoiceId}`);
+      const paidCell = document.getElementById(`paid_cell_${currentInvoiceId}`);
+      const balCell  = document.getElementById(`balance_cell_${currentInvoiceId}`);
+      const payBtn   = row.querySelector('.pay-btn');
+
+      // Actual amount deducted (server may have capped it)
+      const paymentMade = currentBalance - data.balance;
+
+      // Update row cells
+      paidCell.textContent = fmt(data.amount_paid);
+      balCell.textContent  = fmt(data.balance);
+
+      // Update customer card header and tfoot
+      const card = row.closest('.card');
+      if (card) {
+        const headerEl = card.querySelector('[id^="customer_total_"]');
+        const footerEl = card.querySelector('[id^="foot_balance_"]');
+        if (headerEl) {
+          const newVal = Math.max(parseAmt(headerEl.textContent) - paymentMade, 0);
+          headerEl.textContent = 'Balance : ' + fmt(newVal);
+        }
+        if (footerEl) {
+          const newVal = Math.max(parseAmt(footerEl.textContent) - paymentMade, 0);
+          footerEl.textContent = fmt(newVal);
+        }
+      }
+
+      // Update grand total KPI card
+      const kpiEl = document.getElementById('kpi_total');
+      if (kpiEl) kpiEl.textContent = fmt(Math.max(parseAmt(kpiEl.textContent) - paymentMade, 0));
+
+      // Update grand total footer
+      const grandEl = document.getElementById('grand_total_footer');
+      if (grandEl) grandEl.textContent = fmt(Math.max(parseAmt(grandEl.textContent) - paymentMade, 0));
+
+      if (data.paid || data.balance <= 0) {
+        // Row fully settled — show badge then fade out
+        balCell.innerHTML = '<span class="badge bg-success">Soldé</span>';
+        payBtn.remove();
+        setTimeout(() => {
+          row.style.transition = 'opacity 0.6s';
+          row.style.opacity    = '0';
+          setTimeout(() => {
+            row.remove();
+
+            // Decrement "Colis non soldés"
+            const kpiItems = document.getElementById('kpi_items');
+            if (kpiItems) kpiItems.textContent = Math.max(parseInt(kpiItems.textContent) - 1, 0);
+
+            // Check if this customer's card is now empty
+            const tbody = card ? card.querySelector('tbody') : null;
+            if (tbody && tbody.querySelectorAll('tr').length === 0) {
+              // Fade out the whole customer card
+              card.style.transition = 'opacity 0.6s';
+              card.style.opacity    = '0';
+              setTimeout(() => {
+                card.remove();
+                // Decrement "Clients en crédit"
+                const kpiCust = document.getElementById('kpi_customers');
+                if (kpiCust) kpiCust.textContent = Math.max(parseInt(kpiCust.textContent) - 1, 0);
+                updateSummaryFooter();
+              }, 650);
+            } else {
+              // Update the badge on this customer's card header
+              if (card) {
+                const badge = card.querySelector('[id^="badge_count_"]');
+                if (badge) {
+                  const n = parseInt(badge.textContent) || 0;
+                  badge.textContent = Math.max(n - 1, 0) + ' colis';
+                }
+              }
+              updateSummaryFooter();
+            }
+          }, 650);
+        }, 1200);
+      } else {
+        // Update the pay button's data attrs for next click
+        payBtn.dataset.amountPaid = data.amount_paid;
+        payBtn.dataset.balance    = data.balance;
+        currentBalance            = data.balance;
+      }
+
+      modal.hide();
+    })
+    .catch(err => {
+      alert('Erreur de connexion.');
+      console.error(err);
+    })
+    .finally(() => {
+      btn.disabled    = false;
+      btn.textContent = 'Confirmer le paiement';
+    });
+  });
+
+  function updateSummaryFooter() {
+    const kpiCust  = document.getElementById('kpi_customers');
+    const kpiItems = document.getElementById('kpi_items');
+    const footer   = document.getElementById('footer_summary');
+    if (footer && kpiCust && kpiItems) {
+      footer.textContent = `Total général — ${kpiCust.textContent} client(s), ${kpiItems.textContent} colis`;
+    }
+  }
+
+  function getCookie(name) {
+    let value = null;
+    if (document.cookie) {
+      document.cookie.split(';').forEach(c => {
+        c = c.trim();
+        if (c.startsWith(name + '=')) value = decodeURIComponent(c.slice(name.length + 1));
+      });
+    }
+    return value;
+  }
+})();
+</script>
+
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container content-wrapper mt-5">
+  <div class="row">
+    <div class="col-sm-12">
+      <div class="home-tab">
+        <div class="d-sm-flex align-items-center justify-content-between border-bottom mb-3">
+          <h3 class="fw-bold">Tous les colis</h3>
+        </div>
+
+        <!-- === Statistics Cards === -->
+        <div class="row">
+          <div class="col-md-3">
+            <div class="card card-rounded bg-info text-white p-3">
+              <h5>Colis totales</h5>
+              <h3 style="display: flex; justify-content: space-between; align-items: center;">{{ total_packages }}
+              </h3>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-rounded bg-success text-white p-3">
+              <h5>Colis délivrés</h5>
+              <h3>{{ delivered_packages }}</h3>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card card-rounded bg-warning text-white p-3">
+              <h5>Colis en attentes</h5>
+              <h3>{{ pending_packages }}</h3>
+            </div>
+          </div>
+        </div>
+
+        <!-- === Recent Manifests === -->
+        <div class="row mt-4">
+          <div class="grid-margin stretch-card">
+            <div class="card card-rounded">
+              <div class="card-body">
+                <h4 class="card-title">Manifestes récents </h4>
+
+                {% if count_packages != 0 %}
+
+                <div class="table-responsive mt-3">
+                  <table class="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>Id</th>
+                        <th>Manifeste</th>
+                        <th>Client</th>
+                        <th>Receveur</th>
+                        <th>Déscription</th>
+                        <th>Poids</th>
+                        <th>Unité</th>
+                        <th>Statut</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for p in get_packages %}
+                      <tr class="{% if p.status == 'delivered' %} table-info {% elif p.status == 'pending' %} table-warning{% endif %}">
+                        <td>{{p.id }}</td>
+                        <td>{{p.manifest }}</td>
+                        <td>{{p.owner_name }}</td>
+                        <td>{{p.receiver_name }}</td>
+                        <td>{{p.description }}</td>
+                        <td>{{p.weight }}</td>
+                        <td>{{p.measure }}</td>
+                        <td>{% if p.status == "pending" %} Attente {% elif p.status == "delivered" %} Délivré {% endif %}</td>
+                        <td>
+                            <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
+                                <a href="" class="btn btn-secondary" title="Voir">V</a>
+                                <a href="" class="btn btn-primary" title="Modifier">M</a>
+                                <a href="" class="btn btn-danger" title="Supprimer">S</a>
+                            </div>
+                        </td>
+                      </tr>
+                      {% empty %}
+                      <tr><td colspan="5" class="text-center">No pachage found</td></tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+
+                {% else  %}
+
+                <h3 class="text-center">Rien pour l'instant</h3>
+
+                <div class="row">
+                <div class="col-12 text-center">
+                    <img src="/media/empty-icon.jpg" height="350" alt="">
+                </div>
+                </div>
+
+                {% endif  %}
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

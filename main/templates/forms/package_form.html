@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container py-5">
+  <div class="row justify-content-center g-4">
+
+    <!-- FORM -->
+    <div class="col-lg-6 col-md-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-primary text-white py-3">
+          <h5 class="mb-0">{{ form_title }}</h5>
+        </div>
+        <div class="card-body p-4">
+
+          <form method="post" id="packageForm">
+            {% csrf_token %}
+
+            {% if messages %}
+              {% for message in messages %}
+                {% include "error_message.html" %}
+              {% endfor %}
+            {% endif %}
+
+            <!-- Manifeste -->
+            <div class="mb-3">
+              <label class="form-label fw-semibold">{{ form.manifest.label }}</label>
+              {{ form.manifest }}
+            </div>
+
+            <!-- Client / Receveur -->
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label class="form-label fw-semibold">{{ form.owner_name.label }}</label>
+                {{ form.owner_name }}
+              </div>
+              <div class="col">
+                <label class="form-label fw-semibold">{{ form.receiver_name.label }}</label>
+                {{ form.receiver_name }}
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div class="mb-3">
+              <label class="form-label fw-semibold">{{ form.description.label }}</label>
+              {{ form.description }}
+            </div>
+
+            <!-- Poids / Mesure -->
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label class="form-label fw-semibold">{{ form.weight.label }}</label>
+                {{ form.weight }}
+              </div>
+              <div class="col">
+                <label class="form-label fw-semibold">{{ form.measure.label }}</label>
+                {{ form.measure }}
+              </div>
+            </div>
+
+            <!-- Prix par unité -->
+            <div class="mb-3">
+              <label class="form-label fw-semibold">{{ form.price.label }}</label>
+              {{ form.price }}
+            </div>
+
+            <hr class="my-3">
+
+            <!-- Remise / Montant payé -->
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label class="form-label fw-semibold text-success">{{ form.discount.label }}</label>
+                {{ form.discount }}
+              </div>
+              <div class="col">
+                <label class="form-label fw-semibold text-primary">{{ form.amount_paid.label }}</label>
+                {{ form.amount_paid }}
+              </div>
+            </div>
+
+            <div class="d-grid mt-4">
+              <button type="submit" class="btn btn-primary">Enregistrer</button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE SUMMARY -->
+    <div class="col-lg-4 col-md-8">
+      <div class="card shadow-sm border-0 sticky-top" style="top:80px;">
+        <div class="card-header bg-dark text-white py-3">
+          <h6 class="mb-0">Récapitulatif</h6>
+        </div>
+        <div class="card-body p-4">
+
+          <div class="d-flex justify-content-between mb-2">
+            <span class="text-muted">Sous-total</span>
+            <span id="sub_total" class="fw-semibold">$ 0.00</span>
+          </div>
+          <div class="d-flex justify-content-between mb-2 text-success">
+            <span>Remise</span>
+            <span id="r_discount">- $ 0.00</span>
+          </div>
+          <hr class="my-2">
+          <div class="d-flex justify-content-between mb-2">
+            <span class="fw-bold">Total dû</span>
+            <span id="r_total_due" class="fw-bold fs-6">$ 0.00</span>
+          </div>
+          <div class="d-flex justify-content-between mb-2 text-primary">
+            <span>Payé maintenant</span>
+            <span id="r_paid">$ 0.00</span>
+          </div>
+          <hr class="my-2">
+          <div class="d-flex justify-content-between">
+            <span class="fw-bold text-danger">Reste dû (crédit)</span>
+            <span id="r_balance" class="fw-bold fs-5 text-danger">$ 0.00</span>
+          </div>
+
+          <div id="paid_badge" class="mt-3 text-center d-none">
+            <span class="badge bg-success fs-6 px-3 py-2">✓ Payé intégralement</span>
+          </div>
+          <div id="partial_badge" class="mt-3 text-center d-none">
+            <span class="badge bg-warning text-dark fs-6 px-3 py-2">Paiement partiel</span>
+          </div>
+          <div id="credit_badge" class="mt-3 text-center d-none">
+            <span class="badge bg-danger fs-6 px-3 py-2">Crédit total</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  const weightEl    = document.querySelector('[name="weight"]');
+  const priceEl     = document.querySelector('[name="price"]');
+  const discountEl  = document.querySelector('[name="discount"]');
+  const paidEl      = document.querySelector('[name="amount_paid"]');
+
+  function fmt(n) {
+    return '$ ' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function recalc() {
+    const weight   = parseFloat(weightEl?.value)   || 0;
+    const price    = parseFloat(priceEl?.value)    || 0;
+    const discount = parseFloat(discountEl?.value) || 0;
+    const paid     = parseFloat(paidEl?.value)     || 0;
+
+    const subTotal = weight * price;
+    const totalDue = Math.max(subTotal - discount, 0);
+    const balance  = Math.max(totalDue - paid, 0);
+
+    document.getElementById('sub_total').textContent   = fmt(subTotal);
+    document.getElementById('r_discount').textContent  = '- ' + fmt(discount);
+    document.getElementById('r_total_due').textContent = fmt(totalDue);
+    document.getElementById('r_paid').textContent      = fmt(paid);
+    document.getElementById('r_balance').textContent   = fmt(balance);
+
+    document.getElementById('paid_badge').classList.add('d-none');
+    document.getElementById('partial_badge').classList.add('d-none');
+    document.getElementById('credit_badge').classList.add('d-none');
+
+    if (totalDue > 0 && paid >= totalDue) {
+      document.getElementById('paid_badge').classList.remove('d-none');
+    } else if (paid > 0) {
+      document.getElementById('partial_badge').classList.remove('d-none');
+    } else {
+      document.getElementById('credit_badge').classList.remove('d-none');
+    }
+  }
+
+  [weightEl, priceEl, discountEl, paidEl].forEach(el => {
+    if (el) el.addEventListener('input', recalc);
+  });
+
+  recalc();
+})();
+</script>
+
+{% endblock %}

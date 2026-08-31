@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - Real Estate App{% endblock %}
+
+{% block content %}
+
+
+  <div class="content-body">
+
+    <h1 class="text-center my-2">Inscription du compte</h1>
+
+  <section class="basic-inputs">
+
+  <div class="row match-height">
+
+  <div class="col-xl-3 col-lg-3 col-md-12"></div>
+
+    <div class="col-xl-6 col-lg-6 col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Formulaire d'inscription</h4>
+            </div>
+
+                <div class="card-body p-4">
+                  <form method="post" action="{% url 'register' %}">
+                    {% csrf_token %}
+
+
+                    {% if messages %}
+                        {% for message in messages %}
+            
+                        {% include "error_message.html" %}
+            
+                        {% endfor %}
+                    {% endif %}
+
+                  {% for field in form %}
+                  <fieldset class="form-group">
+                    <label for="">{{ field.label }}</label>
+                      {{ field }}
+                  </fieldset>
+                  {% endfor %}
+
+                  <br>
+
+                  <div class="d-grid mt-3">
+                      <button type="submit" class="btn btn-primary" name="button">
+                        S'inscrire
+                      </button>
+                      <a class="btn btn-outline-primary w-100 mt-2" href="{% url 'login' %}">Se connecter</a>
+                  </div>
+                  </form>
+                </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-lg-3 col-md-12"></div>
+
+  </div>
+  </section>
+
+  </div>
+
+
+{% endblock %}25 33

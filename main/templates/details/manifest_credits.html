@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block content %}
+
+<div class="container mt-4">
+
+  <!-- Header KPIs -->
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+      <div>
+        <h5 class="mb-0">💳 Crédits &amp; Paiements</h5>
+        <small class="text-secondary">Manifeste {{ manifest.code }} — {{ manifest.departure_point }} → {{ manifest.arrival_point }}</small>
+      </div>
+      <a href="{% url 'manifest-details' manifest.id %}" class="btn btn-sm btn-outline-light">← Retour</a>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 text-center">
+
+        <div class="col-md-4">
+          <div class="kpi">
+            <div class="text-muted small">Total général</div>
+            <div class="fw-bold fs-4" id="kpi-global">${{ total_global|floatformat:2 }}</div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="kpi" style="border-left:4px solid #198754;">
+            <div class="text-muted small">Payé</div>
+            <div class="fw-bold fs-4 text-success" id="kpi-paid-amount">${{ total_paid|floatformat:2 }}</div>
+            <div class="text-muted small"><span id="kpi-paid-count">{{ paid_list|length }}</span> colis</div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="kpi" style="border-left:4px solid #dc3545;">
+            <div class="text-muted small">Crédit (non payé)</div>
+            <div class="fw-bold fs-4 text-danger" id="kpi-credit-amount">${{ total_credit|floatformat:2 }}</div>
+            <div class="text-muted small"><span id="kpi-credit-count">{{ credit_list|length }}</span> colis</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Crédits (non payés) -->
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-danger text-white py-2 d-flex justify-content-between align-items-center">
+      <h6 class="mb-0">Colis en crédit (non payés) — <span id="credit-header-count">{{ credit_list|length }}</span></h6>
+      <span class="badge bg-white text-danger fs-6" id="credit-header-amount">${{ total_credit|floatformat:2 }}</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="credit-table">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Client</th>
+              <th>Receveur</th>
+              <th>Description</th>
+              <th>Poids</th>
+              <th>Prix unit.</th>
+              <th>Montant</th>
+              <th>Statut</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="credit-tbody">
+            {% for e in credit_list %}
+            <tr id="row-{{ e.invoice.id }}"
+                data-amount="{{ e.total|floatformat:2 }}"
+                data-client="{{ e.pkg.owner_name }}"
+                data-receiver="{{ e.pkg.receiver_name }}"
+                data-description="{{ e.pkg.description }}"
+                data-weight="{{ e.pkg.weight }} {{ e.pkg.get_measure_display }}"
+                data-price="{{ e.pkg.price }}"
+                data-status="{{ e.pkg.status }}">
+              <td>{{ forloop.counter }}</td>
+              <td><strong>{{ e.pkg.owner_name }}</strong></td>
+              <td>{{ e.pkg.receiver_name }}</td>
+              <td class="text-muted small">{{ e.pkg.description }}</td>
+              <td>{{ e.pkg.weight }} {{ e.pkg.get_measure_display }}</td>
+              <td>${{ e.pkg.price }}</td>
+              <td><strong>${{ e.total|floatformat:2 }}</strong></td>
+              <td>
+                {% if e.pkg.status == 'delivered' %}<span class="badge bg-success">Livré</span>
+                {% elif e.pkg.status == 'pending' %}<span class="badge bg-warning text-dark">En attente</span>
+                {% elif e.pkg.status == 'in_transit' %}<span class="badge bg-info text-dark">En transit</span>
+                {% else %}<span class="badge bg-danger">Annulé</span>{% endif %}
+              </td>
+              <td>
+                {% if e.invoice %}
+                <button class="btn btn-sm btn-outline-success pay-btn"
+                        data-invoice-id="{{ e.invoice.id }}"
+                        data-amount="{{ e.total|floatformat:2 }}">
+                  ✓ Marquer payé
+                </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr id="credit-empty-row">
+              <td colspan="9" class="text-center text-muted py-4">Aucun colis en crédit.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payés -->
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
+      <h6 class="mb-0">Colis payés — <span id="paid-header-count">{{ paid_list|length }}</span></h6>
+      <span class="badge bg-white text-success fs-6" id="paid-header-amount">${{ total_paid|floatformat:2 }}</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Client</th>
+              <th>Receveur</th>
+              <th>Description</th>
+              <th>Poids</th>
+              <th>Prix unit.</th>
+              <th>Montant</th>
+              <th>Statut</th>
+              <th>Date paiement</th>
+            </tr>
+          </thead>
+          <tbody id="paid-tbody">
+            {% for e in paid_list %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td><strong>{{ e.pkg.owner_name }}</strong></td>
+              <td>{{ e.pkg.receiver_name }}</td>
+              <td class="text-muted small">{{ e.pkg.description }}</td>
+              <td>{{ e.pkg.weight }} {{ e.pkg.get_measure_display }}</td>
+              <td>${{ e.pkg.price }}</td>
+              <td><strong>${{ e.total|floatformat:2 }}</strong></td>
+              <td>
+                {% if e.pkg.status == 'delivered' %}<span class="badge bg-success">Livré</span>
+                {% elif e.pkg.status == 'pending' %}<span class="badge bg-warning text-dark">En attente</span>
+                {% elif e.pkg.status == 'in_transit' %}<span class="badge bg-info text-dark">En transit</span>
+                {% else %}<span class="badge bg-danger">Annulé</span>{% endif %}
+              </td>
+              <td class="text-muted small">{{ e.invoice.date_issued|date:"d/m/Y H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr id="paid-empty-row">
+              <td colspan="9" class="text-center text-muted py-4">Aucun colis payé.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Running totals (floats)
+let totalPaid   = {{ total_paid|floatformat:2 }};
+let totalCredit = {{ total_credit|floatformat:2 }};
+let paidCount   = {{ paid_list|length }};
+let creditCount = {{ credit_list|length }};
+
+function fmt(value) {
+  return '$' + parseFloat(value).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function refreshUI() {
+  document.getElementById('kpi-paid-amount').textContent    = fmt(totalPaid);
+  document.getElementById('kpi-paid-count').textContent     = paidCount;
+  document.getElementById('kpi-credit-amount').textContent  = fmt(totalCredit);
+  document.getElementById('kpi-credit-count').textContent   = creditCount;
+  document.getElementById('credit-header-count').textContent = creditCount;
+  document.getElementById('credit-header-amount').textContent = fmt(totalCredit);
+  document.getElementById('paid-header-count').textContent  = paidCount;
+  document.getElementById('paid-header-amount').textContent = fmt(totalPaid);
+
+  // Show "empty" row if credit table is empty
+  const creditTbody = document.getElementById('credit-tbody');
+  if (creditCount === 0) {
+    let empty = document.getElementById('credit-empty-row');
+    if (!empty) {
+      empty = document.createElement('tr');
+      empty.id = 'credit-empty-row';
+      empty.innerHTML = '<td colspan="9" class="text-center text-muted py-4">Aucun colis en crédit.</td>';
+      creditTbody.appendChild(empty);
+    }
+  }
+
+  // Renumber credit rows
+  creditTbody.querySelectorAll('tr[id^="row-"]').forEach((tr, i) => {
+    tr.querySelector('td:first-child').textContent = i + 1;
+  });
+
+  // Renumber paid rows
+  const paidTbody = document.getElementById('paid-tbody');
+  paidTbody.querySelectorAll('tr:not(#paid-empty-row)').forEach((tr, i) => {
+    tr.querySelector('td:first-child').textContent = i + 1;
+  });
+}
+
+function buildPaidRow(rowData, now) {
+  const statusMap = {
+    delivered: '<span class="badge bg-success">Livré</span>',
+    pending:   '<span class="badge bg-warning text-dark">En attente</span>',
+    in_transit:'<span class="badge bg-info text-dark">En transit</span>',
+  };
+  const statusBadge = statusMap[rowData.status] || '<span class="badge bg-danger">Annulé</span>';
+
+  const tr = document.createElement('tr');
+  tr.style.opacity = '0';
+  tr.style.transition = 'opacity .5s';
+  tr.innerHTML = `
+    <td>${paidCount}</td>
+    <td><strong>${rowData.client}</strong></td>
+    <td>${rowData.receiver}</td>
+    <td class="text-muted small">${rowData.description}</td>
+    <td>${rowData.weight}</td>
+    <td>$${rowData.price}</td>
+    <td><strong>$${rowData.amount}</strong></td>
+    <td>${statusBadge}</td>
+    <td class="text-muted small">${now}</td>
+  `;
+  return tr;
+}
+
+document.querySelectorAll('.pay-btn').forEach(btn => {
+  btn.addEventListener('click', function () {
+    const invoiceId = this.dataset.invoiceId;
+    const amount    = parseFloat(this.dataset.amount);
+    const row       = document.getElementById('row-' + invoiceId);
+
+    if (!confirm(`Confirmer le paiement de $${amount.toFixed(2)} pour ce colis ?`)) return;
+
+    // Collect row data before removing
+    const rowData = {
+      client:      row.dataset.client,
+      receiver:    row.dataset.receiver,
+      description: row.dataset.description,
+      weight:      row.dataset.weight,
+      price:       row.dataset.price,
+      amount:      row.dataset.amount,
+      status:      row.dataset.status,
+    };
+
+    fetch(`/update-invoice-status/${invoiceId}/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ paid: true }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { alert('Erreur : ' + data.message); return; }
+
+      // Update running totals
+      totalCredit -= amount;
+      totalPaid   += amount;
+      creditCount -= 1;
+      paidCount   += 1;
+
+      // Fade out & remove credit row
+      row.style.transition = 'opacity .4s';
+      row.style.opacity = '0';
+      setTimeout(() => {
+        row.remove();
+        refreshUI();
+      }, 400);
+
+      // Add row to paid table
+      const now = new Date().toLocaleDateString('fr-FR') + ' ' +
+                  new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      const paidTbody = document.getElementById('paid-tbody');
+      const emptyRow  = document.getElementById('paid-empty-row');
+      if (emptyRow) emptyRow.remove();
+
+      const newRow = buildPaidRow(rowData, now);
+      paidTbody.appendChild(newRow);
+      requestAnimationFrame(() => { newRow.style.opacity = '1'; });
+
+    })
+    .catch(() => alert('Erreur de connexion.'));
+  });
+});
+
+function getCookie(name) {
+  let v = null;
+  if (document.cookie) {
+    document.cookie.split(';').forEach(c => {
+      c = c.trim();
+      if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length + 1));
+    });
+  }
+  return v;
+}
+</script>
+
+{% endblock %}

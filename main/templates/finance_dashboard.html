@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block content %}
+
+<main class="container py-4">
+
+  <!-- Date filter -->
+  <form method="get" class="row g-2 align-items-end mb-4">
+    <div class="col-auto">
+      <label class="form-label mb-1 small fw-semibold">Date début</label>
+      <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date|date:'Y-m-d' }}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-1 small fw-semibold">Date fin</label>
+      <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date|date:'Y-m-d' }}">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
+      <a href="{% url 'finance' %}" class="btn btn-outline-secondary btn-sm ms-1">Réinitialiser</a>
+    </div>
+    <div class="col-auto ms-auto text-muted small align-self-end">
+      Période : {{ start_date|date:"d/m/Y" }} → {{ end_date|date:"d/m/Y" }}
+    </div>
+  </form>
+
+  <!-- KPI cards -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-md-3">
+      <div class="kpi">
+        <div class="d-flex justify-content-between">
+          <div>
+            <h6>Colis total</h6>
+            <h3>{{ total_packages }}</h3>
+            <div class="small-muted">Sur la période sélectionnée</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-md-3">
+      <div class="kpi">
+        <h6>Livrés</h6>
+        <h3>{{ total_delivered }}</h3>
+        <div class="small-muted">Colis livrés</div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-md-3">
+      <div class="kpi">
+        <h6>En attente</h6>
+        <h3>{{ total_pending }}</h3>
+        <div class="small-muted">Colis en attente</div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-md-3">
+      <div class="kpi">
+        <h6>Revenus (période)</h6>
+        <h3>{{ revenue_last_30_days|floatformat:2 }}</h3>
+        <div class="small-muted">Total facturé sur la période</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="d-flex justify-content-between mb-3">
+    <div>
+      <a href="{% url 'export_excel_backend' %}?start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}" class="btn btn-outline-primary btn-sm me-2">Export Excel</a>
+      <a href="{% url 'export_pdf_backend' %}?start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">Export PDF</a>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h6>Colis par jour</h6>
+        <canvas id="packagesChart"></canvas>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h6>Revenus facturés par jour</h6>
+        <canvas id="revenueChart"></canvas>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h6>Répartition des statuts</h6>
+        <canvas id="statusPie"></canvas>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h6>Détails financiers</h6>
+        <ul class="list-group list-group-flush">
+          <li class="list-group-item d-flex justify-content-between">
+            Total encaissé <span class="text-success">${{ total_paid|floatformat:2 }}</span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            Total impayé <span class="text-danger">${{ total_unpaid|floatformat:2 }}</span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            Total facturé (tous) <strong><span class="text-info">${{ total_revenue|floatformat:2 }}</span></strong>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer class="mt-4 text-muted small">Généré le {{ today }}</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const days = {{ graph_days|default:"[]"|safe }};
+  const packagesSeries = {{ graph_counts|default:"[]"|safe }};
+  const revenueDays = {{ graph_revenue_days|default:"[]"|safe }};
+  const revenueSeries = {{ graph_revenue_amounts|default:"[]"|safe }};
+
+  const pending = {{ total_pending|default:0 }};
+  const inTransit = {{ total_in_transit|default:0 }};
+  const delivered = {{ total_delivered|default:0 }};
+  const cancelled = {{ total_cancelled|default:0 }};
+
+  new Chart(document.getElementById('packagesChart'), {
+      type: 'line',
+      data: {
+          labels: days,
+          datasets: [{
+              label: 'Colis / jour',
+              data: packagesSeries,
+              borderWidth: 2,
+              tension: 0.3,
+          }]
+      }
+  });
+
+  new Chart(document.getElementById('revenueChart'), {
+      type: 'line',
+      data: {
+          labels: revenueDays,
+          datasets: [{
+              label: 'Revenus facturés',
+              data: revenueSeries,
+              borderWidth: 2,
+              tension: 0.3,
+          }]
+      }
+  });
+
+  new Chart(document.getElementById('statusPie'), {
+      type: 'pie',
+      data: {
+          labels: ['Attente','En transit','Livrés','Annulés'],
+          datasets: [{
+              data: [pending, inTransit, delivered, cancelled],
+              backgroundColor: ['#f0ad4e','#5bc0de','#5cb85c','#d9534f'],
+          }]
+      }
+  });
+</script>
+
+
+{% endblock %}

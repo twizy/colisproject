@@ -1,0 +1,236 @@
+{% load static %}
+{% load django_bootstrap5 %}
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Django Dashboard</title>
+    
+    {% bootstrap_css %}
+    {% bootstrap_javascript %}
+
+    <style>
+      /* Card gradient body */
+      .card-body {
+        background: linear-gradient(145deg, #f0f4ff 0%, #ffffff 55%, #f5f0ff 100%);
+      }
+
+      /* Form inputs inside cards */
+      .card-body input:not([type=checkbox]):not([type=radio]),
+      .card-body select,
+      .card-body textarea {
+        width: 100%;
+        padding: .45rem .75rem;
+        border: 1px solid #dee2e6;
+        border-radius: .375rem;
+        font-size: .95rem;
+        background: rgba(255,255,255,.85);
+        transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
+      }
+      .card-body input:not([type=checkbox]):not([type=radio]):focus,
+      .card-body select:focus,
+      .card-body textarea:focus {
+        border-color: #86b7fe;
+        outline: 0;
+        box-shadow: 0 0 0 .2rem rgba(13,110,253,.25);
+        background: #fff;
+      }
+      .card { border-radius: .6rem; }
+      .card-header { border-radius: .6rem .6rem 0 0 !important; }
+
+      /* KPI card */
+      .kpi {
+        background: linear-gradient(145deg, #f0f4ff 0%, #ffffff 55%, #f5f0ff 100%);
+        border: 1px solid #e3e6ea;
+        border-radius: .6rem;
+        padding: 1.2rem 1.4rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      }
+      .small-muted { font-size: .8rem; color: #6c757d; margin-top: .25rem; }
+
+      /* Avatar circle */
+      .avatar-circle {
+        width: 110px; height: 110px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #dee2e6;
+      }
+      .avatar-placeholder {
+        width: 110px; height: 110px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #0d6efd, #6610f2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2.5rem; color: #fff; font-weight: 700;
+        border: 3px solid #dee2e6;
+      }
+    </style>
+
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+    <div class="container">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo01" aria-controls="navbarTogglerDemo01" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
+        <a class="navbar-brand" href="{% url 'home' %}">
+            <img src="{% static 'logo/logo.png' %}" alt="Avatar Logo" style="width:100px; max-width:180px; height:auto;" class="rounded-pill">
+        </a>
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            {% if request.user.is_authenticated %}
+            <li class="nav-item">
+                <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'home' %}">Dashboard</a>
+            </li>
+            {% if request.user.is_staff or request.user.is_superuser %}
+            <li class="nav-item dropdown mx-2">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Gestion
+              </a>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{% url 'manifest' %}">Manifeste</a></li>
+                <li><a class="dropdown-item" href="{% url 'package' %}">Colis</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-primary" href="{% url 'invoices' %}">Factures</a></li>
+                <li><a class="dropdown-item" href="{% url 'delivery-history' %}">Historique des colis récupérés</a></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown mx-2">
+              <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'finance' or request.resolver_match.url_name == 'credits' or request.resolver_match.url_name == 'payment-history' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Finance
+              </a>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item text-danger" href="{% url 'credits' %}">Crédits</a></li>
+                {% if request.user.is_superuser %}
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'finance' %}">Tableau de bord</a></li>
+                <li><a class="dropdown-item" href="{% url 'payment-history' %}">Historique des paiements</a></li>
+                {% endif %}
+              </ul>
+            </li>
+            {% endif %}
+            <li class="nav-item dropdown mx-2">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                {{request.user}}
+              </a>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{% url 'profile' %}">Mon profil</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="{% url 'logout' %}">Sign out</a></li>
+              </ul>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a class="nav-link" href="{% url 'login' %}">Login</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link">/</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{% url 'register' %}">Register</a>
+            </li>
+            {% endif %}
+        </ul>
+        </div>
+    </div>
+    </nav>
+
+    <br> <br>
+
+    <br><br>
+
+    {% block content %}
+
+ 
+    
+    {% endblock %}
+
+    <footer class="bg-dark text-white py-4 mt-4">
+        
+        <div class="container">
+            <div class="row">
+                <!-- Column 1 -->
+                <div class="col-md-4">
+                    <img src="{% static 'logo/logo.png' %}" width="200px" height="auto" alt="logo"/>
+                </div>
+
+                <!-- Column 2 -->
+                <div class="col-md-3">
+                    <h5>Quick links</h5>
+                    <ul class="list-unstyled">
+                        <li>
+                            <a href="http://" class="text-white text-decoration-none">Our mission</a>
+                        </li>
+                        <li>
+                            <a href="http://" class="text-white text-decoration-none">Popular agents</a>
+                        </li>
+                        <li>
+                            <a href="http://" class="text-white text-decoration-none">Favorites house</a>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Column 3 -->
+                <div class="col-md-3">
+                    <h5>Contact us</h5>
+                    <ul class="list-unstyled">
+                        <li>
+                            <a href="tel:+123456789" type="tel" class="text-white text-decoration-none">+123456789</a>
+                        </li>
+                        <li>
+                            <a href="mailto:info@email.com" type="email" class="text-white text-decoration-none">info@email.com</a>
+                        </li>
+                        <li>
+                            <a class="text-white text-decoration-none">123, street Buja</a>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Column 4 -->
+                <div class="col-md-2">
+                    <h5>Our social media</h5>
+                    <ul class="list-unstyled">
+                        <li>
+                            <a class="text-white text-decoration-none">E-mail</a>
+                        </li>
+                        <li>
+                            <a href="tel:+123456789" type="tel" class="text-white text-decoration-none">Twitter</a>
+                        </li>
+                        <li>
+                            <a class="text-white text-decoration-none">Facebook</a>
+                        </li>
+                        <li>
+                            <a href="mailto:info@email.com" type="email" class="text-white text-decoration-none">Instagram</a>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <div class="row">
+                <div class="col-6 text-start text-secondary">© {% now "Y" %} Agence Lukogo — Tous droits réservés.</div>
+                <div class="col-6 text-end text-secondary">Développé avec ❤️ par <strong>Uburundi Soft</strong></div>
+            </div>
+
+            
+
+        </div>
+      
+    </footer>
+
+
+   <script src="{% static '../static/jquery/jquery-3.3.1.min.js' %}" type="text/javascript"></script>
+
+    <script>
+    // 3000 time of displaying
+    // 1000 speed of disapearing
+    $(document).ready(function(){
+        $("#danger-alert").fadeTo(3000,1000).slideUp(1000, function(){
+            $("#danger-alert").slideUp(1000);
+        });
+    });
+    </script>
+</body>
+</html>

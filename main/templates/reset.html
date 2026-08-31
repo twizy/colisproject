@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-5">
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-warning text-dark py-3">
+          <h5 class="mb-0">Changer le mot de passe</h5>
+        </div>
+        <div class="card-body p-4">
+          <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Ancien mot de passe</label>
+              {{ form.old_password }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Nouveau mot de passe</label>
+              {{ form.new_password1 }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Confirmer le nouveau mot de passe</label>
+              {{ form.new_password2 }}
+            </div>
+
+            <div class="d-grid mt-4">
+              <button type="submit" class="btn btn-warning fw-semibold">Changer le mot de passe</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="text-center mt-3">
+        <a href="{% url 'profile' %}" class="text-muted small">← Retour au profil</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}

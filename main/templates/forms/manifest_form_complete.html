@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-success text-white py-3">
+          <h5 class="mb-0">{{ form_title }}</h5>
+        </div>
+        <div class="card-body p-4">
+
+          <form method="post" id="propertyFormId">
+            {% csrf_token %}
+
+            {% if messages %}
+              {% for message in messages %}
+                {% include "error_message.html" %}
+              {% endfor %}
+            {% endif %}
+
+            {% for f in form %}
+              <div class="mb-3">
+                <label class="form-label fw-semibold">{{ f.label }}</label>
+                {{ f }}
+              </div>
+            {% endfor %}
+
+            <div class="d-grid mt-4">
+              <button type="submit" class="btn btn-success">Compléter</button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}

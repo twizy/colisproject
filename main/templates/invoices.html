@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+
+<style>
+@media print {
+    body { margin: 0; padding: 0; }
+    .container { width: 100%; }
+}
+</style>
+
+<div class="container mt-4">
+
+  <div class="d-sm-flex align-items-center justify-content-between border-bottom mb-3">
+    <h3 class="fw-bold">Invoices</h3>
+  </div>
+
+  <!-- TABLE DES COLIS -->
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h5 class="mb-3">Liste des colis payé et non-payé</h5>
+
+      <table class="table table-bordered table-striped">
+        <thead class="table-light">
+          <tr>
+            <th class="text-center">Action</th>
+            <th>#</th>
+            <th>Description</th>
+            <th>Client</th>
+            <th>Receveur</th>
+            <th>Poids</th>
+            <th>Mesure</th>
+            {% if request.user.is_staff or request.user.is_superuser %}
+              <th>Prix</th>
+            {% endif %}
+            <th>Payé(s)</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for p in my_invoices %}
+          <tr>
+
+            <!-- Checkbox -->
+            <td class="text-center">
+              {% if not p.paid %}
+                <input type="checkbox"
+                       class="form-check-input invoice-checkbox"
+                       data-invoice-id="{{ p.id }}"
+                       aria-label="Marquer comme payé">
+              {% endif %}
+            </td>
+
+            <td>{{ forloop.counter }}</td>
+            <td>{{ p.package.description }}</td>
+            <td>{{ p.package.owner_name }}</td>
+            <td>{{ p.package.receiver_name }}</td>
+            <td>{{ p.package.weight }}</td>
+            <td>{{ p.package.get_measure_display }}</td>
+
+            {% if request.user.is_staff or request.user.is_superuser %}
+              <td>{{ p.amount|floatformat:2|intcomma }}</td>
+            {% endif %}
+
+            <!-- Status -->
+            <td id="status-{{ p.id }}">
+              {% if p.paid %}
+                <span class="badge bg-success">Oui</span>
+              {% else %}
+                <span class="badge bg-danger">Non</span>
+              {% endif %}
+            </td>
+
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="{% if request.user.is_staff or request.user.is_superuser %}9{% else %}8{% endif %}"
+                class="text-center text-muted">
+              Aucun facture pour le moment.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RÉSUMÉ -->
+  <div class="card mt-4 shadow-sm">
+    <div class="card-body">
+      <h5>Résumé des colis payés / non-payés</h5>
+
+      <p>
+        <strong>Total des factures :</strong>
+        {{ all_paid_invoices.count }} payé(s) et
+        {{ all_unpaid_invoices.count }} non-payé(s)
+      </p>
+
+      {% if request.user.is_staff or request.user.is_superuser %}
+      <p>
+        <strong>
+          Montant total :
+          <span id="all_paid_invoices_total" class="text-success" style="font-size: 20px;">
+            $ {{ all_paid_invoices_total|floatformat:2|intcomma }}
+          </span>
+          -
+          <span id="all_unpaid_invoices_total" class="text-danger" style="font-size: 20px;">
+            $ {{ all_unpaid_invoices_total|floatformat:2|intcomma }}
+          </span>
+        </strong>
+      </p>
+
+      <a id="refresh_total" class="btn btn-md btn-danger" href="{% url 'invoices' %}"> Actualiser </a>
+
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ✅ JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const all_paid_inv = document.getElementById('all_paid_invoices_total');
+  const all_unpaid_inv = document.getElementById('all_unpaid_invoices_total');
+  const refres = document.getElementById('refresh_total');
+  refres.style.display = 'none';
+
+  if(all_paid_inv.textContent.trim() === "$"){
+    all_paid_inv.innerText="$ 0";
+  }
+
+  if(all_unpaid_inv.textContent.trim() === "$"){
+    all_unpaid_inv.innerText="$ 0";
+  }
+  
+
+  document.querySelectorAll('.invoice-checkbox').forEach(function (checkbox) {
+
+    checkbox.addEventListener('change', function () {
+
+      const id = this.dataset.invoiceId;
+      const statusCell = document.getElementById(`status-${id}`);
+      
+      if (!statusCell) return;
+
+      // Prevent instant toggle
+      this.checked = false;
+
+      const userInput = prompt(
+        "1 → Confirmer le paiement\n2 → Annuler (ne rien faire)"
+      );
+
+      const confirmation = userInput ? userInput.trim() : '';
+      let statusToSend = null;
+
+      if (confirmation === '1') {
+        statusToSend = true;
+      } else if (confirmation === '2' || confirmation === '') {
+        return;
+      } else {
+        alert("Code non reconnu. Entrez 1 pour confirmer ou 2 pour annuler.");
+        return;
+      }
+
+      fetch(`/update-invoice-status/${id}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ paid: statusToSend })
+      })
+      .then(response => response.json())
+      .then(data => {
+
+        if (!data.success) {
+          return;
+        }
+
+        if (data.new_status === true) {
+          statusCell.innerHTML = '<span class="badge bg-success">Oui</span>';
+          checkbox.checked = true;
+          checkbox.style.display = 'none';
+
+          refres.style.display = '';
+
+        } else {
+          statusCell.innerHTML = '<span class="badge bg-danger">Non</span>';
+          checkbox.checked = false;
+        }
+
+        statusCell.classList.add('fw-bold');
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Erreur de connexion.');
+      });
+
+    });
+  });
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+});
+</script>
+
+{% endblock %}

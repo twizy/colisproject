@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block content %}
+
+<style>
+@media print {
+    .btn, .no-print {
+        display: none !important;
+    }
+    body { margin: 0; padding: 0; }
+    .container { width: 100%; }
+}
+</style>
+
+<div class="container mt-4" id="printableArea">
+
+  <!-- HEADER -->
+  <div class="card shadow-sm mb-4" style="position: sticky;">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">FICHE DE MANIFESTE</h4>
+        <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+      </div>
+      <hr>
+      <div class="row">
+        <div class="col-md-6">
+          <p><strong>Nom d'agent :</strong> {{ get_manifest.user }}</p>
+          <p><strong>Camion :</strong> {{ get_manifest.vehicle_plate }}</p>
+          <p><strong>Chauffeur :</strong> {{ get_manifest.driver_name }}</p>
+        </div>
+        <div class="col-md-6">
+          <!-- <p><strong>Départ :</strong> {{ get_manifest.departure_time|date:"H:i" }} → {{ get_manifest.arrival_time|date:"H:i" }}</p> -->
+          <p><strong>Date :</strong> {{ get_manifest.created_at|date:"d-m-Y" }} | <strong>Départ :</strong> {{ get_manifest.departure_time|date:"H:i" }}</p>
+          <p><strong>Trajet :</strong> {{ get_manifest.departure_point }} → {{ get_manifest.arrival_point }}</p>
+          <p><strong>Statut :</strong> 
+            {% if get_manifest.is_full %}
+              <span class="badge bg-success">Complète</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">Incomplète</span>
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE DES COLIS -->
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="mb-0">Liste des colis</h5>
+        {% if unpaid_count %}
+          <span class="badge bg-danger fs-6">
+            ⚠ {{ unpaid_count }} non payé{{ unpaid_count|pluralize }}
+          </span>
+        {% endif %}
+      </div>
+
+      <table class="table table-bordered table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th></th>
+            <th>#</th>
+            <th>Description</th>
+            <th>Client</th>
+            <th>Receveur</th>
+            <th>Poids</th>
+            <th>Mesure</th>
+            {% if request.user.is_staff or request.user.is_superuser %}
+            <th>Prix</th>
+            {% endif %}
+            <th>Statut</th>
+            <th>Paiement</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in get_all_packages %}
+          {% with invoice=p.invoice %}
+          {% if invoice %}
+            {% if invoice.paid %}
+              <tr>
+            {% else %}
+              <tr class="table-danger">
+            {% endif %}
+          {% else %}
+            <tr class="table-danger">
+          {% endif %}
+            <td class="text-center">
+              {% if request.user.is_staff or request.user.is_superuser %}
+                {% if p.status != "delivered" %}
+                  <input type="checkbox" class="form-check-input arrival-checkbox" data-package-id="{{ p.id }}">
+                {% endif %}
+              {% endif %}
+            </td>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ p.description }}</td>
+            <td class="fw-semibold">{{ p.owner_name }}</td>
+            <td>{{ p.receiver_name }}</td>
+            <td>{{ p.weight }}</td>
+            <td>{{ p.get_measure_display }}</td>
+            {% if request.user.is_staff or request.user.is_superuser %}
+            <td>${{ p.price }}</td>
+            {% endif %}
+            <td id="status-{{ p.id }}">
+              {% if p.status == 'delivered' %}
+                <span class="badge bg-success">Délivré</span>
+              {% elif p.status == 'pending' %}
+                <span class="badge bg-warning text-dark">En attente</span>
+              {% elif p.status == 'in_transit' %}
+                <span class="badge bg-info text-dark">En transit</span>
+              {% elif p.status == 'cancelled' %}
+                <span class="badge bg-danger">Annulé</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if invoice %}
+                {% if invoice.paid %}
+                  <span class="badge bg-success">✓ Payé</span>
+                {% else %}
+                  <span class="badge bg-danger">✗ Crédit</span>
+                {% endif %}
+              {% else %}
+                <span class="badge bg-secondary">Aucune facture</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endwith %}
+          {% empty %}
+          <tr><td colspan="10" class="text-center text-muted">Aucun colis enregistré pour ce manifeste.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RÉSUMÉ -->
+  <div class="card mt-4 shadow-sm">
+    <div class="card-body">
+      <h5>Résumé du manifeste</h5>
+      <p><strong>Total des colis :</strong> {{ count_packages }}</p>
+      <p><strong>Poids total :</strong> {{ total_weight }} kg</p>
+
+      {% if request.user.is_staff or request.user.is_superuser %}
+        <p><strong>Montant total : <span class="text-success" style="font-size: 20px;"> $ {{ total_amount|floatformat:2|intcomma }} </span></strong></p>
+      {% endif %}
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'update-manifest' get_id %}">Modifier</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'complete-manifest' get_id %}">Compléter</a>
+        {% endif %}
+        {% if request.user.is_superuser %}
+        <form method="post" action="{% url 'delete-manifest' get_id %}" class="d-inline"
+              onsubmit="var r=prompt('Tapez « Oui » pour confirmer la suppression du manifeste {{ get_manifest.code }} :'); return r !== null && r.trim().toLowerCase() === 'oui';">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+        </form>
+        {% endif %}
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <a class="btn btn-outline-warning btn-sm ms-auto" href="{% url 'manifest-credits' get_id %}">
+          💳 Crédits &amp; Paiements
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ✅ JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  // document.querySelectorAll('.arrival-checkbox').forEach(function (checkbox) {
+  //   checkbox.addEventListener('change', function () {
+  //     const id = this.getAttribute('data-package-id');
+  //     const statusCell = document.getElementById(`status-${id}`);
+
+  //     if (!statusCell) return console.warn('Cellule statut introuvable pour ID', id);
+
+  //     if (this.checked) {
+  //       const confirmation = prompt("Écrivez 'oui' pour confirmer que ce colis est arrivé :\nÉcrivez 'oui' pour confirmer que ce colis est arrivé :");
+  //       if (confirmation && confirmation.toLowerCase() === 'oui') {
+  //         fetch(`/update-package-status/${id}/`, {
+  //           method: 'POST',
+  //           headers: {
+  //             'X-CSRFToken': getCookie('csrftoken'),
+  //           },
+  //         })
+  //         .then(response => response.json())
+  //         .then(data => {
+  //           if (data.success) {
+  //             // ✅ Met à jour le badge en vert
+  //             statusCell.innerHTML = '<span class="badge bg-success">Délivré</span>';
+  //             statusCell.classList.add('fw-bold');
+  //           } else {
+  //             alert('Erreur : ' + data.message);
+  //             this.checked = false;
+  //           }
+  //         })
+  //         .catch(err => {
+  //           console.error('Erreur réseau ou JSON :', err);
+  //           alert('Erreur de connexion (voir console)');
+  //           this.checked = false;
+  //         });
+  //       } 
+
+  //       else {
+  //         alert("Confirmation échouée. Coche annulée.");
+  //         this.checked = false;
+  //       }
+  //     } else {
+  //       // Décocher → remettre badge "En attente"
+  //       statusCell.innerHTML = '<span class="badge bg-warning text-dark">Attente</span>';
+  //     }
+  //   });
+  // });
+
+
+  document.querySelectorAll('.arrival-checkbox').forEach(function (checkbox) {
+    checkbox.addEventListener('change', function () {
+        const id = this.getAttribute('data-package-id');
+        const statusCell = document.getElementById(`status-${id}`);
+
+        if (!statusCell) return console.warn('Cellule statut introuvable pour ID', id);
+
+        if (this.checked) {
+            const userInput = prompt(
+                "Entrez le code action pour ce colis :\n" +
+                "  1 → Confirmer la récupération (Livré)\n" +
+                "  2 → Mettre en attente\n" +
+                "  3 → Annuler"
+            );
+            const code = userInput ? userInput.trim() : '';
+
+            let statusToSend = '';
+            if (code === '1') {
+                statusToSend = 'delivered';
+            } else if (code === '2') {
+                statusToSend = 'pending';
+            } else if (code === '3') {
+                statusToSend = 'cancelled';
+            } else {
+                alert("Code non reconnu. Aucune modification effectuée.");
+                this.checked = false;
+                return;
+            }
+
+            fetch(`/update-package-status/${id}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({ status: statusToSend })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (statusToSend === 'delivered') {
+                        statusCell.innerHTML = '<span class="badge bg-success">Délivré</span>';
+                        checkbox.style.display = 'none';
+                    } else if (statusToSend === 'pending') {
+                        statusCell.innerHTML = '<span class="badge bg-warning text-dark">En attente</span>';
+                        this.checked = false;
+                    } else if (statusToSend === 'cancelled') {
+                        statusCell.innerHTML = '<span class="badge bg-danger">Annulé</span>';
+                        this.checked = false;
+                        checkbox.style.display = 'none';
+                    }
+                } else {
+                    alert('Erreur : ' + data.message);
+                    this.checked = false;
+                }
+            })
+            .catch(() => {
+                alert('Erreur de connexion.');
+                this.checked = false;
+            });
+
+        } else {
+            statusCell.innerHTML = '<span class="badge bg-info text-dark">En transit</span>';
+        }
+    });
+});
+
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+});
+</script>
+
+{% endblock %}
