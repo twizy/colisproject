@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(D:\\\\DjangoProjects\\\\colis_env\\\\Scripts\\\\pip.exe install *)",
+      "PowerShell(& \"D:\\\\DjangoProjects\\\\colis_env\\\\Scripts\\\\pip.exe\" install django-bootstrap5)",
+      "PowerShell(& \"D:\\\\DjangoProjects\\\\colis_env\\\\colis_env\\\\Scripts\\\\pip.exe\" install django-bootstrap5)",
+      "PowerShell(& \"D:\\\\DjangoProjects\\\\colis_env\\\\colis_env\\\\Scripts\\\\python.exe\" -m pip install django-bootstrap5 2>&1)",
+      "PowerShell(python --version; where.exe python)",
+      "PowerShell(& \"C:\\\\Python313\\\\python.exe\" -m venv \"D:\\\\DjangoProjects\\\\colis_env\\\\venv313\")",
+      "PowerShell(& \"D:\\\\DjangoProjects\\\\colis_env\\\\venv313\\\\Scripts\\\\pip.exe\" install \"django==5.2.7\" \"djangorestframework\" \"django-bootstrap5==25.2\" \"django-mathfilters\" \"pillow\" \"beautifulsoup4\")",
+      "PowerShell(& \"D:\\\\DjangoProjects\\\\colis_env\\\\venv313\\\\Scripts\\\\python.exe\" -c \"import bootstrap5; print\\('bootstrap5 OK'\\)\")",
+      "PowerShell(& \"D:\\\\DjangoProjects\\\\colis_env\\\\venv313\\\\Scripts\\\\python.exe\" -c \"import django_bootstrap5; print\\('django_bootstrap5 OK'\\)\")",
+      "Bash(Get-ChildItem -Path \"D:\\\\DjangoProjects\\\\colis_env\\\\colis_env\\\\colis\\\\colisproject\" -Directory)",
+      "Bash(Select-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"D:\\\\DjangoProjects\\\\colis_env\\\\colis_env\\\\colis\\\\colisproject\" | Where-Object {$_.PSIsContainer})",
+      "PowerShell(Get-ChildItem -Path \"D:\\\\DjangoProjects\\\\colis_env\\\\colis_env\\\\colis\\\\colisproject\\\\colisproject\" | Where-Object {$_.PSIsContainer})",
+      "PowerShell(Get-ChildItem -Path \"D:\\\\DjangoProjects\\\\colis_env\\\\colis_env\\\\colis\\\\colisproject\\\\main\" | Where-Object {$_.PSIsContainer})"
+    ]
+  }
+}
