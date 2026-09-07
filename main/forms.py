@@ -117,7 +117,7 @@ class PackageForm(forms.ModelForm):
     )
 
 
-    weight = forms.CharField(
+    weight = forms.DecimalField(
         widget=forms.NumberInput(attrs={
             'placeholder': 'Poids',
             'class': 'form-control',
@@ -125,6 +125,9 @@ class PackageForm(forms.ModelForm):
             'step': '0.01',
             'min': '0'
         }),
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0'),
         label='Poids'
     )
 
@@ -137,7 +140,7 @@ class PackageForm(forms.ModelForm):
         label='Mesure'
     )
 
-    price = forms.CharField(
+    price = forms.DecimalField(
         widget=forms.NumberInput(attrs={
             'placeholder': 'Prix par unité (USD)',
             'class': 'form-control',
@@ -146,6 +149,9 @@ class PackageForm(forms.ModelForm):
             'min': '0',
             'id': 'id_price',
         }),
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal('0'),
         label='Prix par unité (USD) '
     )
 

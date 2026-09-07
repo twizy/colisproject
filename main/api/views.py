@@ -31,6 +31,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from ..finance import TOTAL_DUE, invoice_totals, total_invoiced
 from ..models import (
     ManifestTable, PackageTable, InvoiceTable, MeasurePriceTable,
     Profile, PaymentHistory, DeliveryHistory,
@@ -71,13 +72,8 @@ def _date_range(request, default_days=30):
 
 
 def _weighted_sum(qs):
-    """Somme de (poids x prix unitaire) — le vrai chiffre d'affaires facturé."""
-    return qs.aggregate(v=Sum(
-        ExpressionWrapper(
-            F('package__weight') * F('amount'),
-            output_field=DecimalField(max_digits=14, decimal_places=2),
-        )
-    ))['v'] or Decimal('0')
+    """Total facturé (poids x prix unitaire - remise) — cf. main.finance."""
+    return total_invoiced(qs)
 
 
 # ============================================================
@@ -463,14 +459,7 @@ class InvoiceListView(generics.ListAPIView):
             'unpaid_count': unpaid_qs.count(),
             'paid_total': money(_weighted_sum(paid_qs)),
             'unpaid_total': money(_weighted_sum(unpaid_qs)),
-            'balance_total': money(
-                unpaid_qs.aggregate(v=Sum(
-                    ExpressionWrapper(
-                        F('package__weight') * F('amount') - F('discount') - F('amount_paid'),
-                        output_field=DecimalField(max_digits=14, decimal_places=2),
-                    )
-                ))['v'] or Decimal('0')
-            ),
+            'balance_total': money(invoice_totals(unpaid_qs)['outstanding']),
         }
         return response
 
@@ -761,8 +750,10 @@ class FinanceStatsView(APIView):
         )
         revenue_by_day = (
             invoices.annotate(day=TruncDate('date_issued'))
-            .values('day').annotate(total=Sum('amount_paid')).order_by('day')
+            .values('day').annotate(total=Sum(TOTAL_DUE)).order_by('day')
         )
+
+        totals = invoice_totals(invoices)
 
         return Response({
             'start_date': start,
@@ -772,11 +763,11 @@ class FinanceStatsView(APIView):
             'total_in_transit': packages.filter(status='in_transit').count(),
             'total_delivered': packages.filter(status='delivered').count(),
             'total_cancelled': packages.filter(status='cancelled').count(),
-            'total_revenue': money(_weighted_sum(invoices)),
-            'total_paid': money(_weighted_sum(invoices.filter(paid=True))),
-            'total_unpaid': money(_weighted_sum(invoices.filter(paid=False))),
-            'revenue_delivered': money(_weighted_sum(invoices.filter(package__status='delivered'))),
-            'cash_collected': money(invoices.aggregate(v=Sum('amount_paid'))['v'] or Decimal('0')),
+            'total_revenue': money(totals['invoiced']),
+            'total_paid': money(totals['collected']),
+            'total_unpaid': money(totals['outstanding']),
+            'revenue_delivered': money(total_invoiced(invoices.filter(package__status='delivered'))),
+            'cash_collected': money(totals['collected']),
             'graph_days': [str(r['day']) for r in packages_by_day],
             'graph_counts': [r['count'] for r in packages_by_day],
             'graph_revenue_days': [str(r['day']) for r in revenue_by_day],

@@ -22,14 +22,125 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-c(_hgg3o)^0dkgpl%su=rzmi2+mljwb3*r9q!)f_$2g%6aff8%'
+# ============================================================
+# Configuration par variables d'environnement
+#
+# Rien de sensible ni de spécifique à un serveur n'est écrit en dur
+# dans ce fichier : tout vient de l'environnement. En développement,
+# les valeurs sont lues depuis un fichier .env à la racine du projet
+# (jamais commité) ; en production, depuis les variables définies
+# dans cPanel > Setup Python App.
+#
+# Une vraie variable d'environnement l'emporte toujours sur le .env.
+# ============================================================
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+def _load_dotenv(path):
+    """Charge un .env minimal (KEY=valeur) sans écraser l'environnement réel."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        # setdefault : la variable d'environnement du serveur prime.
+        os.environ.setdefault(key, value)
 
-ALLOWED_HOSTS = ["*"]
 
+_load_dotenv(BASE_DIR / '.env')
+
+
+def _env_bool(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _env_list(name):
+    return [item.strip() for item in os.environ.get(name, '').split(',') if item.strip()]
+
+
+# ============================================================
+# DEBUG
+#
+# Defaut volontairement a False : oublier de definir la variable sur
+# le serveur ne peut donc JAMAIS allumer le mode debug en production.
+# En local, DJANGO_DEBUG=True est fourni par le fichier .env.
+# ============================================================
+
+DEBUG = _env_bool('DJANGO_DEBUG', default=False)
+
+
+# ============================================================
+# SECRET_KEY
+#
+# Sert aussi de SIGNING_KEY aux jetons JWT (voir SIMPLE_JWT plus bas) :
+# quiconque la connait peut forger un jeton valide. Elle ne doit donc
+# jamais se trouver dans le depot git.
+#
+# En production, l'absence de la variable arrete le demarrage plutot
+# que de retomber silencieusement sur une cle connue.
+#
+# Generer une cle :
+#   python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+# ============================================================
+
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-key-jamais-utilisee-en-production'
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY n'est pas definie. En production, la renseigner "
+            "dans les variables d'environnement de l'application "
+            "(cPanel > Setup Python App > Environment variables)."
+        )
+
+
+# ============================================================
+# ALLOWED_HOSTS : liste blanche de l'en-tete Host de la requete.
+#
+# Rien a voir avec CORS/CSRF_TRUSTED_ORIGINS : ceux-ci filtrent
+# l'en-tete Origin (navigateurs uniquement) et ne remplacent pas
+# cette liste. Un client Android passe ici avec le domaine/IP
+# de sa baseUrl -> il doit figurer dans la liste.
+#
+# Les domaines de production sont listes INCONDITIONNELLEMENT.
+# Les placer dans un « else: » d'un test sur DEBUG est un piege :
+# si DEBUG se retrouve a True sur le serveur, le domaine disparait
+# de la liste et Django renvoie 400 sur absolument toutes les
+# requetes - site entier hors service, pas seulement l'API.
+#
+# (les ports ne se mettent pas dans ALLOWED_HOSTS)
+# ============================================================
+
+PRODUCTION_HOSTS = [
+    'lukogoexpresscompany.com',
+    'www.lukogoexpresscompany.com',
+]
+
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '[::1]',
+] + PRODUCTION_HOSTS
+
+if DEBUG:
+    ALLOWED_HOSTS += [
+        '10.0.2.2',    # emulateur Android (AVD) vers la machine hote
+        '10.0.3.2',    # emulateur Genymotion
+        'testserver',  # client de test Django
+    ]
+
+# Hotes supplementaires via variable d'environnement. Pour tester
+# l'app sur un TELEPHONE PHYSIQUE en dev, y mettre l'IP LAN du PC :
+#   DJANGO_ALLOWED_HOSTS=192.168.1.42
+ALLOWED_HOSTS += _env_list('DJANGO_ALLOWED_HOSTS')
 
 # Application definition
 
@@ -187,22 +298,45 @@ SIMPLE_JWT = {
     'TOKEN_OBTAIN_SERIALIZER': 'main.api.serializers.LukogoTokenObtainPairSerializer',
 }
 
-# ============================================================
+# ==========================================
 # CORS
-# Nécessaire seulement pour un client navigateur (JS).
-# Android/Retrofit n'est PAS soumis au CORS, mais on l'active
-# pour pouvoir tester l'API depuis une page web / Swagger.
-# ============================================================
+#
+# Android/Retrofit n'est PAS soumis au CORS (c'est une regle de
+# navigateur). Ces reglages servent uniquement a pouvoir tester
+# l'API depuis une page web ou un client Swagger.
+# ==========================================
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG          # en dev uniquement
-CORS_ALLOWED_ORIGINS = [                # utilisé quand DEBUG = False
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+# Toutes origines autorisees en developpement uniquement.
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+# Origines de production listees inconditionnellement, pour la meme
+# raison que ALLOWED_HOSTS plus haut : elles ne doivent pas dependre
+# de la valeur de DEBUG.
+CORS_ALLOWED_ORIGINS = ['https://' + host for host in PRODUCTION_HOSTS]
+
+if DEBUG:
+    CORS_ALLOWED_ORIGINS += [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
+
 CORS_ALLOW_CREDENTIALS = True
+# Appliquer CORS uniquement aux URLs de l'API.
 CORS_URLS_REGEX = r'^/api/.*$'
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
-]
+
+# ==========================================
+# CSRF
+# ==========================================
+
+CSRF_TRUSTED_ORIGINS = ['https://' + host for host in PRODUCTION_HOSTS]
+
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+    ]
+
+# Origines supplementaires via variable d'environnement, ex :
+#   DJANGO_CSRF_TRUSTED_ORIGINS=https://api.mondomaine.bi
+CSRF_TRUSTED_ORIGINS += _env_list('DJANGO_CSRF_TRUSTED_ORIGINS')

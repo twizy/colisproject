@@ -31,6 +31,7 @@ from io import BytesIO
 from django.http import FileResponse, HttpResponseForbidden
 from django.contrib.auth.decorators import user_passes_test
 from django.db.models.functions import TruncDate
+from .finance import TOTAL_DUE, invoice_totals, total_invoiced
 from django.utils import timezone
 import matplotlib
 matplotlib.use("Agg")   # headless backend for servers
@@ -62,6 +63,8 @@ def is_staff_or_patron(user):
 def home(request):
     import calendar
     from django.db.models import Case, When, IntegerField
+    # from django.core.management.utils import get_random_secret_key
+    # print(get_random_secret_key())
     page_name = 'Home'
     total_manifests       = ManifestTable.objects.count()
     total_packages        = PackageTable.objects.count()
@@ -241,7 +244,7 @@ def create_package(request):
             amount_paid   = form.cleaned_data.get('amount_paid') or Decimal('0')
             created_by    = request.user
 
-            total_due  = max(Decimal(str(weight)) * Decimal(str(price)) - discount, Decimal('0'))
+            total_due  = max(weight * price - discount, Decimal('0'))
             is_paid    = amount_paid >= total_due
 
             package_object = PackageTable(
@@ -505,28 +508,44 @@ def manifest_credits(request, mani_id):
 
     for pkg in packages:
         invoice = getattr(pkg, 'invoice', None)
-        total   = (pkg.weight or 0) * (pkg.price or 0)
-        entry   = {
+        # Mêmes définitions que la page Crédits et le tableau de bord :
+        # remise déduite, acomptes comptés.
+        if invoice:
+            total   = invoice.total_due
+            settled = invoice.amount_paid
+            balance = invoice.balance
+        else:
+            total   = (pkg.weight or Decimal('0')) * (pkg.price or Decimal('0'))
+            settled = Decimal('0')
+            balance = total
+        entry = {
             'pkg':     pkg,
             'invoice': invoice,
             'total':   total,
+            'paid':    settled,
+            'balance': balance,
         }
         if invoice and invoice.paid:
             paid_list.append(entry)
         else:
             credit_list.append(entry)
 
-    total_paid   = sum(e['total'] for e in paid_list)
-    total_credit = sum(e['total'] for e in credit_list)
-    total_global = total_paid + total_credit
+    # « Payé » = argent réellement encaissé, acomptes des colis encore en
+    # crédit compris ; « crédit » = ce qui reste à percevoir.
+    total_paid    = sum((e['paid'] for e in paid_list + credit_list), Decimal('0'))
+    total_credit  = sum((e['balance'] for e in credit_list), Decimal('0'))
+    total_global  = sum((e['total'] for e in paid_list + credit_list), Decimal('0'))
+    # Total de la section « Colis payés » seule, distinct de l'encaissé global.
+    paid_section_total = sum((e['total'] for e in paid_list), Decimal('0'))
 
     return render(request, 'details/manifest_credits.html', {
-        'manifest':     manifest,
-        'paid_list':    paid_list,
-        'credit_list':  credit_list,
-        'total_paid':   total_paid,
-        'total_credit': total_credit,
-        'total_global': total_global,
+        'manifest':           manifest,
+        'paid_list':          paid_list,
+        'credit_list':        credit_list,
+        'total_paid':         total_paid,
+        'total_credit':       total_credit,
+        'total_global':       total_global,
+        'paid_section_total': paid_section_total,
     })
 
 
@@ -720,17 +739,15 @@ def finance_dashboard(request):
     paid_invoices    = period_invoices.filter(paid=True)
     unpaid_invoices  = period_invoices.filter(paid=False)
 
-    def weighted_sum(qs, key='amount'):
-        return qs.aggregate(v=Sum(
-            ExpressionWrapper(F('package__weight') * F('amount'),
-                output_field=DecimalField(max_digits=12, decimal_places=2))
-        ))['v'] or 0
-
-    total_revenue    = weighted_sum(period_invoices)
-    total_paid       = weighted_sum(paid_invoices)
-    total_unpaid     = weighted_sum(unpaid_invoices)
-    revenue_delivered= weighted_sum(period_invoices.filter(package__status="delivered"))
-    revenue_period_total = period_invoices.aggregate(total=Sum("amount"))['total'] or 0
+    # Mêmes définitions que la page Crédits : le facturé déduit la remise et
+    # l'encaissé compte les acomptes, y compris ceux des factures encore
+    # ouvertes.
+    totals = invoice_totals(period_invoices)
+    total_revenue    = totals['invoiced']
+    total_paid       = totals['collected']
+    total_unpaid     = totals['outstanding']
+    revenue_delivered= total_invoiced(period_invoices.filter(package__status="delivered"))
+    revenue_period_total = total_revenue
 
     # === 3. Graph data by day ===
     packages_by_day = (
@@ -744,7 +761,7 @@ def finance_dashboard(request):
         period_invoices
         .annotate(day=TruncDate('date_issued'))
         .values('day')
-        .annotate(total=Sum("amount"))
+        .annotate(total=Sum(TOTAL_DUE))
         .order_by('day')
     )
 
@@ -863,40 +880,26 @@ def credits_list(request):
 def all_invoices(request):
     if not is_staff_or_patron(request.user):
         return redirect('home')
-    all_paid_invoices = InvoiceTable.objects.filter(paid = True)
-    all_unpaid_invoices = InvoiceTable.objects.filter(paid = False)
-    my_invoices = InvoiceTable.objects.all().order_by('-date_issued')
 
-    # all_paid_invoices_total = all_paid_invoices.aggregate(paid_total=Sum("amount" * "package.price"))["paid_total"] or 0
-    all_unpaid_invoices_total = all_unpaid_invoices.aggregate(unpaid_total=Sum("amount"))["unpaid_total"] or 0
+    my_invoices = (
+        InvoiceTable.objects
+        .select_related('package', 'package__manifest')
+        .order_by('-date_issued')
+    )
+    all_paid_invoices   = my_invoices.filter(paid=True)
+    all_unpaid_invoices = my_invoices.filter(paid=False)
 
-    sum_all_paid_invoices = all_paid_invoices.aggregate(
-            amount =
-                Sum(
-                    ExpressionWrapper(F('package__weight') * F('amount'),
-                    output_field=DecimalField(max_digits=12, decimal_places=2))
-                )
-        )
-
-    all_paid_invoices_total = sum_all_paid_invoices["amount"]
-
-    sum_all_unpaid_invoices = all_unpaid_invoices.aggregate(
-        amount =
-            Sum(
-                ExpressionWrapper(F('package__weight') * F('amount'),
-                output_field=DecimalField(max_digits=12, decimal_places=2))
-            )
-        )
-    
-
-    all_unpaid_invoices_total = sum_all_unpaid_invoices["amount"]
+    # Mêmes définitions que le tableau de bord financier et la page Crédits :
+    # l'encaissé compte les acomptes, le reste dû déduit la remise.
+    totals = invoice_totals(my_invoices)
 
     return render(request, "invoices.html", {
-        'all_paid_invoices' : all_paid_invoices,
-        'all_unpaid_invoices' : all_unpaid_invoices,
-        'my_invoices' : my_invoices,
-        'all_paid_invoices_total' : all_paid_invoices_total,
-        'all_unpaid_invoices_total' : all_unpaid_invoices_total,
+        'my_invoices':         my_invoices,
+        'all_paid_invoices':   all_paid_invoices,
+        'all_unpaid_invoices': all_unpaid_invoices,
+        'total_invoiced':      totals['invoiced'],
+        'total_collected':     totals['collected'],
+        'total_outstanding':   totals['outstanding'],
     })
 
 
@@ -926,7 +929,7 @@ def export_excel_backend(request):
         day = start_date + timedelta(days=i)
         p_count = PackageTable.objects.filter(created_at__date=day).count()
         p_rev   = PackageTable.objects.filter(created_at__date=day).aggregate(total=Sum('price'))['total'] or Decimal('0.00')
-        inv_rev = InvoiceTable.objects.filter(date_issued__date=day).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        inv_rev = total_invoiced(InvoiceTable.objects.filter(date_issued__date=day))
         ws.append([day.isoformat(), p_count, float(p_rev), float(inv_rev)])
 
     out = BytesIO()
@@ -958,7 +961,7 @@ def export_pdf_backend(request):
 
     packages_series = [PackageTable.objects.filter(created_at__date=d).count() for d in days]
     invoices_series = [
-        float(InvoiceTable.objects.filter(date_issued__date=d).aggregate(total=Sum('amount'))['total'] or 0.0)
+        float(total_invoiced(InvoiceTable.objects.filter(date_issued__date=d)))
         for d in days
     ]
 
@@ -1008,9 +1011,10 @@ def export_pdf_backend(request):
     pdf.drawString(50, kpi_y - line * 3, f"En attente : {period_packages.filter(status='pending').count()}")
     pdf.drawString(50, kpi_y - line * 4, f"En transit : {period_packages.filter(status='in_transit').count()}")
     pdf.drawString(50, kpi_y - line * 5, f"Annulés : {period_packages.filter(status='cancelled').count()}")
-    pdf.drawString(50, kpi_y - line * 6, f"Total facturé : {float(period_invoices.aggregate(total=Sum('amount'))['total'] or 0):,.2f}")
-    pdf.drawString(50, kpi_y - line * 7, f"Total encaissé : {float(period_invoices.filter(paid=True).aggregate(total=Sum('amount'))['total'] or 0):,.2f}")
-    pdf.drawString(50, kpi_y - line * 8, f"Total impayé : {float(period_invoices.filter(paid=False).aggregate(total=Sum('amount'))['total'] or 0):,.2f}")
+    period_totals = invoice_totals(period_invoices)
+    pdf.drawString(50, kpi_y - line * 6, f"Total facturé : {float(period_totals['invoiced']):,.2f}")
+    pdf.drawString(50, kpi_y - line * 7, f"Total encaissé : {float(period_totals['collected']):,.2f}")
+    pdf.drawString(50, kpi_y - line * 8, f"Total impayé : {float(period_totals['outstanding']):,.2f}")
 
     img_w = width - 80
     img_h = 210

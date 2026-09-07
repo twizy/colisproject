@@ -61,6 +61,8 @@
               <th>Poids</th>
               <th>Prix unit.</th>
               <th>Montant</th>
+              <th>Payé</th>
+              <th>Reste dû</th>
               <th>Statut</th>
               <th>Action</th>
             </tr>
@@ -69,6 +71,7 @@
             {% for e in credit_list %}
             <tr id="row-{{ e.invoice.id }}"
                 data-amount="{{ e.total|floatformat:2 }}"
+                data-balance="{{ e.balance|floatformat:2 }}"
                 data-client="{{ e.pkg.owner_name }}"
                 data-receiver="{{ e.pkg.receiver_name }}"
                 data-description="{{ e.pkg.description }}"
@@ -82,6 +85,8 @@
               <td>{{ e.pkg.weight }} {{ e.pkg.get_measure_display }}</td>
               <td>${{ e.pkg.price }}</td>
               <td><strong>${{ e.total|floatformat:2 }}</strong></td>
+              <td class="text-success">${{ e.paid|floatformat:2 }}</td>
+              <td class="text-danger fw-bold">${{ e.balance|floatformat:2 }}</td>
               <td>
                 {% if e.pkg.status == 'delivered' %}<span class="badge bg-success">Livré</span>
                 {% elif e.pkg.status == 'pending' %}<span class="badge bg-warning text-dark">En attente</span>
@@ -92,6 +97,7 @@
                 {% if e.invoice %}
                 <button class="btn btn-sm btn-outline-success pay-btn"
                         data-invoice-id="{{ e.invoice.id }}"
+                        data-balance="{{ e.balance|floatformat:2 }}"
                         data-amount="{{ e.total|floatformat:2 }}">
                   ✓ Marquer payé
                 </button>
@@ -100,7 +106,7 @@
             </tr>
             {% empty %}
             <tr id="credit-empty-row">
-              <td colspan="9" class="text-center text-muted py-4">Aucun colis en crédit.</td>
+              <td colspan="11" class="text-center text-muted py-4">Aucun colis en crédit.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -113,7 +119,7 @@
   <div class="card shadow-sm border-0">
     <div class="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
       <h6 class="mb-0">Colis payés — <span id="paid-header-count">{{ paid_list|length }}</span></h6>
-      <span class="badge bg-white text-success fs-6" id="paid-header-amount">${{ total_paid|floatformat:2 }}</span>
+      <span class="badge bg-white text-success fs-6" id="paid-header-amount">${{ paid_section_total|floatformat:2 }}</span>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
@@ -164,10 +170,11 @@
 
 <script>
 // Running totals (floats)
-let totalPaid   = {{ total_paid|floatformat:2 }};
-let totalCredit = {{ total_credit|floatformat:2 }};
-let paidCount   = {{ paid_list|length }};
-let creditCount = {{ credit_list|length }};
+let totalPaid    = {{ total_paid|floatformat:2 }};        // encaissé, acomptes compris
+let totalCredit  = {{ total_credit|floatformat:2 }};      // reste dû
+let paidSection  = {{ paid_section_total|floatformat:2 }};// total facturé des colis soldés
+let paidCount    = {{ paid_list|length }};
+let creditCount  = {{ credit_list|length }};
 
 function fmt(value) {
   return '$' + parseFloat(value).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -181,7 +188,7 @@ function refreshUI() {
   document.getElementById('credit-header-count').textContent = creditCount;
   document.getElementById('credit-header-amount').textContent = fmt(totalCredit);
   document.getElementById('paid-header-count').textContent  = paidCount;
-  document.getElementById('paid-header-amount').textContent = fmt(totalPaid);
+  document.getElementById('paid-header-amount').textContent = fmt(paidSection);
 
   // Show "empty" row if credit table is empty
   const creditTbody = document.getElementById('credit-tbody');
@@ -190,7 +197,7 @@ function refreshUI() {
     if (!empty) {
       empty = document.createElement('tr');
       empty.id = 'credit-empty-row';
-      empty.innerHTML = '<td colspan="9" class="text-center text-muted py-4">Aucun colis en crédit.</td>';
+      empty.innerHTML = '<td colspan="11" class="text-center text-muted py-4">Aucun colis en crédit.</td>';
       creditTbody.appendChild(empty);
     }
   }
@@ -235,10 +242,11 @@ function buildPaidRow(rowData, now) {
 document.querySelectorAll('.pay-btn').forEach(btn => {
   btn.addEventListener('click', function () {
     const invoiceId = this.dataset.invoiceId;
-    const amount    = parseFloat(this.dataset.amount);
+    const amount    = parseFloat(this.dataset.amount);   // total facturé
+    const balance   = parseFloat(this.dataset.balance);  // reste à percevoir
     const row       = document.getElementById('row-' + invoiceId);
 
-    if (!confirm(`Confirmer le paiement de $${amount.toFixed(2)} pour ce colis ?`)) return;
+    if (!confirm(`Confirmer le paiement de $${balance.toFixed(2)} pour ce colis ?`)) return;
 
     // Collect row data before removing
     const rowData = {
@@ -263,9 +271,10 @@ document.querySelectorAll('.pay-btn').forEach(btn => {
     .then(data => {
       if (!data.success) { alert('Erreur : ' + data.message); return; }
 
-      // Update running totals
-      totalCredit -= amount;
-      totalPaid   += amount;
+      // Update running totals : seul le solde restant entre en caisse.
+      totalCredit -= balance;
+      totalPaid   += balance;
+      paidSection += amount;
       creditCount -= 1;
       paidCount   += 1;
 

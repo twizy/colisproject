@@ -32,7 +32,10 @@
             <th>Poids</th>
             <th>Mesure</th>
             {% if request.user.is_staff or request.user.is_superuser %}
-              <th>Prix</th>
+              <th class="text-end">Prix/unité</th>
+              <th class="text-end">Total dû</th>
+              <th class="text-end">Payé</th>
+              <th class="text-end">Reste dû</th>
             {% endif %}
             <th>Payé(s)</th>
           </tr>
@@ -60,7 +63,12 @@
             <td>{{ p.package.get_measure_display }}</td>
 
             {% if request.user.is_staff or request.user.is_superuser %}
-              <td>{{ p.amount|floatformat:2|intcomma }}</td>
+              <td class="text-end">$ {{ p.amount|floatformat:2|intcomma }}</td>
+              <td class="text-end">$ {{ p.total_due|floatformat:2|intcomma }}</td>
+              <td class="text-end text-success">$ {{ p.amount_paid|floatformat:2|intcomma }}</td>
+              <td class="text-end {% if p.balance %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                $ {{ p.balance|floatformat:2|intcomma }}
+              </td>
             {% endif %}
 
             <!-- Status -->
@@ -75,7 +83,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="{% if request.user.is_staff or request.user.is_superuser %}9{% else %}8{% endif %}"
+            <td colspan="{% if request.user.is_staff or request.user.is_superuser %}12{% else %}8{% endif %}"
                 class="text-center text-muted">
               Aucun facture pour le moment.
             </td>
@@ -98,18 +106,26 @@
       </p>
 
       {% if request.user.is_staff or request.user.is_superuser %}
-      <p>
-        <strong>
-          Montant total :
-          <span id="all_paid_invoices_total" class="text-success" style="font-size: 20px;">
-            $ {{ all_paid_invoices_total|floatformat:2|intcomma }}
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between px-0">
+          Total encaissé
+          <span id="total_collected" class="text-success fw-bold">
+            $ {{ total_collected|floatformat:2|intcomma }}
           </span>
-          -
-          <span id="all_unpaid_invoices_total" class="text-danger" style="font-size: 20px;">
-            $ {{ all_unpaid_invoices_total|floatformat:2|intcomma }}
+        </li>
+        <li class="list-group-item d-flex justify-content-between px-0">
+          Reste dû
+          <span id="total_outstanding" class="text-danger fw-bold">
+            $ {{ total_outstanding|floatformat:2|intcomma }}
           </span>
-        </strong>
-      </p>
+        </li>
+        <li class="list-group-item d-flex justify-content-between px-0">
+          <strong>Total facturé</strong>
+          <strong id="total_invoiced" class="text-info">
+            $ {{ total_invoiced|floatformat:2|intcomma }}
+          </strong>
+        </li>
+      </ul>
 
       <a id="refresh_total" class="btn btn-md btn-danger" href="{% url 'invoices' %}"> Actualiser </a>
 
@@ -123,19 +139,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
-  const all_paid_inv = document.getElementById('all_paid_invoices_total');
-  const all_unpaid_inv = document.getElementById('all_unpaid_invoices_total');
+  // Le bouton n'apparaît qu'après un changement de statut, pour recharger les
+  // totaux. Absent pour les non-staff : d'où le garde-fou.
   const refres = document.getElementById('refresh_total');
-  refres.style.display = 'none';
+  if (refres) refres.style.display = 'none';
 
-  if(all_paid_inv.textContent.trim() === "$"){
-    all_paid_inv.innerText="$ 0";
-  }
-
-  if(all_unpaid_inv.textContent.trim() === "$"){
-    all_unpaid_inv.innerText="$ 0";
-  }
-  
 
   document.querySelectorAll('.invoice-checkbox').forEach(function (checkbox) {
 
@@ -185,7 +193,7 @@ document.addEventListener('DOMContentLoaded', function () {
           checkbox.checked = true;
           checkbox.style.display = 'none';
 
-          refres.style.display = '';
+          if (refres) refres.style.display = '';
 
         } else {
           statusCell.innerHTML = '<span class="badge bg-danger">Non</span>';
